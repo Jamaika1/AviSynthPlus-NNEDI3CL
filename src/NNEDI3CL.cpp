@@ -1,6 +1,6 @@
 #include <cerrno>
 #include <cstdio>
-#include <exception>
+//#include <exception>
 
 #include <locale>
 #include <memory>
@@ -204,7 +204,7 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
     //const AVS_VideoInfo& vi_temp{ fi->vi };
     //AVS_Value v{ avs_void };
 
-    const NNEDI3CLData params =
+    NNEDI3CLData params =
     {
       queue,
       kernel,
@@ -257,10 +257,10 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
             const int n = planes[i];
 
             if (n >= vi.NumComponents())
-                throw "plane index out of range";
+                env->ThrowError("plane index out of range");
 
             if (params.process[n])
-                throw "plane specified twice";
+                env->ThrowError("plane specified twice");
 
             params.process[n] = 1;
         }
@@ -270,9 +270,9 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         if (vi.IsY() && !vi.IsRGB())
         {
             if (planecount > 1)
-                throw "luma cannot be true when processed planes are more than 1";
+                env->ThrowError("luma cannot be true when processed planes are more than 1");
             if (!params.process[0])
-                throw "planes=0 must be used for luma=true";
+                env->ThrowError("planes=0 must be used for luma=true");
             vi.pixel_type |= VideoInfo::CS_GENERIC_Y;
         }
 
@@ -284,35 +284,35 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         //const int device_id{ avs_defined(avs_array_elt(args, Device)) ? avs_as_int(avs_array_elt(args, Device)) : -1 };
 
         if (params.field < -2 || params.field > 3)
-            throw "field must be -2, -1, 0, 1, 2 or 3";
+            env->ThrowError("field must be -2, -1, 0, 1, 2 or 3");
         if (!params.dh && (vi.height & 1))
-            throw "height must be mod 2 when dh=False";
+            env->ThrowError("height must be mod 2 when dh=False");
         if (params.dh && params.field > 1)
-            throw "field must be 0 or 1 when dh=True";
+            env->ThrowError("field must be 0 or 1 when dh=True");
         if (params.dw && params.field > 1)
-            throw "field must be 0 or 1 when dw=True";
+            env->ThrowError("field must be 0 or 1 when dw=True");
         if (nsize < 0 || nsize > 6)
-            throw "nsize must be 0, 1, 2, 3, 4, 5 or 6";
+            env->ThrowError("nsize must be 0, 1, 2, 3, 4, 5 or 6");
         if (nns < 0 || nns > 4)
-            throw "nns must be 0, 1, 2, 3 or 4";
+            env->ThrowError("nns must be 0, 1, 2, 3 or 4");
         if (qual < 1 || qual > 2)
-            throw "qual must be 1 or 2";
+            env->ThrowError("qual must be 1 or 2");
         if (etype < 0 || etype > 1)
-            throw "etype must be 0 or 1";
+            env->ThrowError("etype must be 0 or 1");
 
         if (vi.NumComponents() < 4)
         {
             if (pscrn < 1 || pscrn > 2)
-                throw "pscrn must be 1 or 2";
+                env->ThrowError("pscrn must be 1 or 2");
         }
         else
         {
             if (pscrn != 1)
-                throw "pscrn must be 1 for float input";
+                env->ThrowError("pscrn must be 1 for float input");
         }
 
         if (device1 >= static_cast<int>(boost::compute::system::device_count()))
-            throw "device index out of range";
+            env->ThrowError("device index out of range");
 
         if (list_device)
         {
@@ -321,9 +321,9 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
             for (size_t i{ 0 }; i < devices.size(); ++i)
                 params.err += std::to_string(i) + ": " + devices[i].name() + " (" + devices[i].platform().name() + ")" + "\n";
 
-            //AVS_Value cl{ avs_new_value_clip(clip) };
-            //AVS_Value args_[2]{ cl , avs_new_value_string(err.c_str()) };
-            //v = env->Invoke("Text", avs_new_value_array(args_, 2), 0);
+            AVSValue cl{ new AVSValue(_child) };
+            AVSValue args_[2]{ cl , new AVSValue(params.err.c_str()) };
+            env->Invoke("Text", new AVSValue(args_, 2), 0);
 
             //avs_release_value(cl);
             //avs_release_clip(clip);
@@ -383,9 +383,9 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
             params.err += "Out of order (on host): " + std::string{ !!(device.get_info<CL_DEVICE_QUEUE_ON_HOST_PROPERTIES>() & 1) ? "CL_TRUE" : "CL_FALSE" } + "\n";
             params.err += "Out of order (on device): " + std::string{ !!(device.get_info<CL_DEVICE_QUEUE_ON_DEVICE_PROPERTIES>() & 1) ? "CL_TRUE" : "CL_FALSE" };
 
-            //AVS_Value cl{ avs_new_value_clip(clip) };
-            //AVS_Value args_[2]{ cl, avs_new_value_string(err.c_str()) };
-            //v = env->Invoke("Text", avs_new_value_array(args_, 2), 0);
+            AVSValue cl{ new AVSValue(_child) };
+            AVSValue args_[2]{ cl, new AVSValue(params.err.c_str()) };
+            env->Invoke("Text", new AVSValue(args_, 2), 0);
 
             //avs_release_value(cl);
             //avs_release_clip(clip);
@@ -396,7 +396,7 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         if (field == -2 || field > 1)
         {
             if (vi.num_frames > INT_MAX / 2)
-                throw "resulting clip is too long";
+                env->ThrowError("resulting clip is too long");
 
             vi.num_frames <<= 1;
 
@@ -435,12 +435,12 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         }
 #endif
         if (!weightsFile)
-            throw "error opening file " + weightsPath + " (" + std::strerror(errno) + ")";
+            env->ThrowError(("error opening file " + weightsPath + " (" + std::strerror(errno) + ")").c_str());
 
         if (std::fseek(weightsFile, 0, SEEK_END))
         {
             std::fclose(weightsFile);
-            throw "error seeking to the end of file " + weightsPath + " (" + std::strerror(errno) + ")";
+            env->ThrowError(("error seeking to the end of file " + weightsPath + " (" + std::strerror(errno) + ")").c_str());
         }
 
         constexpr long correctSize{ 13574928 }; // Version 0.9.4 of the Avisynth plugin
@@ -449,12 +449,12 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         if (weightsSize == -1)
         {
             std::fclose(weightsFile);
-            throw "error determining the size of file " + weightsPath + " (" + std::strerror(errno) + ")";
+            env->ThrowError(("error determining the size of file " + weightsPath + " (" + std::strerror(errno) + ")").c_str());
         }
         else if (weightsSize != correctSize)
         {
             std::fclose(weightsFile);
-            throw "incorrect size of file " + weightsPath + ". Should be " + std::to_string(correctSize) + " bytes, but got " + std::to_string(weightsSize) + " bytes instead";
+            env->ThrowError(("incorrect size of file " + weightsPath + ". Should be " + std::to_string(correctSize) + " bytes, but got " + std::to_string(weightsSize) + " bytes instead").c_str());
         }
 
         std::rewind(weightsFile);
@@ -466,7 +466,7 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         {
             std::fclose(weightsFile);
             free(bdata);
-            throw "error reading file " + weightsPath + ". Should read " + std::to_string(correctSize) + " bytes, but read " + std::to_string(bytesRead) + " bytes instead";
+            env->ThrowError(("error reading file " + weightsPath + ". Should read " + std::to_string(correctSize) + " bytes, but read " + std::to_string(bytesRead) + " bytes instead").c_str());
         }
 
         std::fclose(weightsFile);
@@ -632,7 +632,7 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         delete[] weights1;
 
         if (static_cast<size_t>(dims1 * 2) > device.get_info<size_t>(CL_DEVICE_IMAGE_MAX_BUFFER_SIZE))
-            throw "the device's image max buffer size is too small. Reduce nsize/nns...or buy a new graphics card";
+            env->ThrowError("the device's image max buffer size is too small. Reduce nsize/nns...or buy a new graphics card");
 
         boost::compute::program program;
         try
@@ -687,7 +687,7 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         }
         catch (const boost::compute::opencl_error& error)
         {
-            throw error.error_string() + "\n" + program.build_log();
+            env->ThrowError((error.error_string() + "\n" + program.build_log()).c_str());
         }
 
         if (vi.ComponentSize() < 4)
@@ -766,10 +766,10 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
             params.weights1 = mem;
         }
     }
-    catch (const std::exception& e)
+    /*catch (const std::exception& e)
     {
         env->ThrowError(e.what());
-    }
+    }*/
     catch (const std::string& error)
     {
         params.err = "NNEDI3CL: " + error;
@@ -791,17 +791,17 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
 
     /*if (!avs_defined(v))
     {
-        v = avs_new_value_clip(clip);
+        v = avs_new_value_clip(clip);*/
 
-        fi->user_data = reinterpret_cast<void*>(params);
-        fi->get_frame = NNEDI3CL_get_frame;
-        fi->set_cache_hints = NNEDI3CL_set_cache_hints;
-        fi->free_filter = free_NNEDI3CL;
-    }
+        reinterpret_cast<void*>(&params);
+        Nnedi3CL::GetFrame(0, env);
+        //fi->set_cache_hints = NNEDI3CL_set_cache_hints;
+        //fi->free_filter = free_NNEDI3CL;
+    //}
 
-    avs_release_clip(clip);
+    //avs_release_clip(clip);
 
-    return v;*/
+    //return v;
 }
 
 //Nnedi3CL::~Nnedi3CL()
@@ -819,7 +819,7 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
 PVideoFrame Nnedi3CL::GetFrame(int n, IScriptEnvironment* env)
 {
     //NNEDI3CLData* d{ static_cast<NNEDI3CLData*>(fi->user_data) };
-    const NNEDI3CLData params =
+    NNEDI3CLData params =
     {
       queue,
       kernel,
@@ -896,13 +896,13 @@ PVideoFrame Nnedi3CL::GetFrame(int n, IScriptEnvironment* env)
     {
         (this->*filter)(src, dst, field, &params);
     }
-    catch (const std::exception& e)
+    /*catch (const std::exception& e)
     {
         env->ThrowError(e.what());
-    }
+    }*/
     catch (const boost::compute::opencl_error& error)
     {
-        err = "NNEDI3CL: " + error.error_string();
+        params.err = "NNEDI3CL: " + error.error_string();
         env->ThrowError(err.c_str());
         //fi->error = d->err.c_str();
         //avs_release_video_frame(src);
