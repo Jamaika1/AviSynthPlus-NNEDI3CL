@@ -1,5 +1,6 @@
 #include <cerrno>
 #include <cstdio>
+#include <exception>
 
 #include <locale>
 #include <memory>
@@ -53,6 +54,9 @@ class Nnedi3CL : public GenericVideoFilter
     //std::vector<EWAPixelCoeff_Nnedi3CL*> out1;
     //int planecount;
     //float peak;
+    int field;
+    bool dh;
+    bool dw;
     int process[4];
     boost::compute::command_queue queue;
     boost::compute::kernel kernel;
@@ -67,12 +71,12 @@ class Nnedi3CL : public GenericVideoFilter
     template<typename T, bool st>
     void resize_plane_c(PVideoFrame& src, PVideoFrame& dst, const int field_n, const NNEDI3CLData* const __restrict__ d);
 
-    void(Nnedi3CL::*filter)(PVideoFrame&, PVideoFrame&, const int, const NNEDI3CLData* const __restrict__);
+    void (Nnedi3CL::*filter)(PVideoFrame&, PVideoFrame&, const int, const NNEDI3CLData* const __restrict__);
 
 public:
     Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int nsize, int nns, int qual, int etype, int pscrn, int device,
     bool list_device, bool info, bool st, bool luma, IScriptEnvironment* env);
-    //PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
+    PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
     int __stdcall SetCacheHints(int cachehints, int frame_range)
     {
         return cachehints == CACHE_GET_MTMODE ? MT_MULTI_INSTANCE : 0;
@@ -103,7 +107,7 @@ void Nnedi3CL::resize_plane_c(PVideoFrame& src, PVideoFrame& dst, const int fiel
     const int* planes = (vi.IsRGB()) ? planes_r : planes_y;
 
     int planecount = vi.NumComponents();
-    for (int i = 0; i < planecount; ++i)
+    for (int i{ 0 }; i < planecount; ++i)
     {
         const int plane = planes[i];
         if (d->process[i])
@@ -188,116 +192,6 @@ AVS_FORCEINLINE void muldivRational(int64_t* num, int64_t* den, int mul, int div
     *den /= a;
 }
 
-/*PVideoFrame* AVSC_CC NNEDI3CL_get_frame(AVS_FilterInfo* fi, int n)
-{
-    NNEDI3CLData* d{ static_cast<NNEDI3CLData*>(fi->user_data) };
-
-    const int field_no_prop = [&]()
-    {
-        if (d->field == -1)
-            return avs_get_parity(fi->child, n) ? 1 : 0;
-        else if (d->field == -2)
-            return avs_get_parity(fi->child, n >> 1) ? 3 : 2;
-        else
-            return -1;
-    }();
-
-    int field{ (d->field > -1) ? d->field : field_no_prop };
-
-    PVideoFrame* src = child->GetFrame((field > 1) ? (n >> 1) : n, env);
-
-    if (!src)
-        return nullptr;
-
-    PVideoFrame* dst = avs_new_video_frame_p(fi->env, &fi->vi, src);
-
-    if (d->field < 0)
-    {
-        int err;
-        const int64_t field_based{ env->propGetInt("_FieldBased", 0, &err) };
-        if (err == 0)
-        {
-            if (field_based == 1)
-                field = 0;
-            else if (field_based == 2)
-                field = 1;
-
-            if (d->field > 1 || field_no_prop > 1)
-            {
-                if (field_based == 0)
-                    field -= 2;
-
-                field = static_cast<int>((n & 1) ? (field == 0) : (field == 1));
-            }
-        }
-        else
-        {
-            if (field > 1)
-            {
-                field -= 2;
-                field = static_cast<int>((n & 1) ? (field == 0) : (field == 1));
-            }
-        }
-    }
-    else
-    {
-        if (field > 1)
-        {
-            field -= 2;
-            field = static_cast<int>((n & 1) ? (field == 0) : (field == 1));
-        }
-    }
-
-    try
-    {
-        d->filter(src, dst, field, d);
-    }
-    catch (const boost::compute::opencl_error& error)
-    {
-        d->err = "NNEDI3CL: " + error.error_string();
-        fi->error = d->err.c_str();
-        avs_release_video_frame(src);
-        avs_release_video_frame(dst);
-
-        return nullptr;
-    }
-
-    AVS_Map* props{ env->getFramePropsRW(dst) };
-
-    env->propGetInt(props, "_FieldBased", 0, 0);
-
-    if (d->field > 1 || field_no_prop > 1)
-    {
-        int errNum;
-        int errDen;
-        int64_t durationNum{ env->propGetInt(props, "_DurationNum", 0, &errNum) };
-        int64_t durationDen{ env->propGetInt(props, "_DurationDen", 0, &errDen) };
-        if (errNum == 0 && errDen == 0)
-        {
-            muldivRational(&durationNum, &durationDen, 1, 2);
-            env->propGetInt("_DurationNum", durationNum, 0);
-            env->propGetInt("_DurationDen", durationDen, 0);
-        }
-    }
-
-    //avs_release_video_frame(src);
-
-    return dst;
-}*/
-
-/*void AVSC_CC free_NNEDI3CL(AVS_FilterInfo* fi)
-{
-    NNEDI3CLData* d{ static_cast<NNEDI3CLData*>(fi->user_data) };
-    clReleaseMemObject(d->weights1);
-    delete d;
-}
-
-int AVSC_CC NNEDI3CL_set_cache_hints(AVS_FilterInfo* fi, int cachehints, int frame_range)
-{
-    return cachehints == AVS_CACHE_GET_MTMODE ? 2 : 0;
-}*/
-
-//AVS_Value AVSC_CC Create_NNEDI3CL(AVS_ScriptEnvironment* env, AVS_Value args, void* param)
 Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int nsize, int nns, int qual, int etype, int pscrn, int device1,
     bool list_device, bool info, bool st, bool luma, IScriptEnvironment* env)
     : GenericVideoFilter(_child)//, cplace(cplace_)
@@ -310,9 +204,7 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
     //const AVS_VideoInfo& vi_temp{ fi->vi };
     //AVS_Value v{ avs_void };
 
-    int planecount = (planes1 == 0) ? vi.NumComponents() : planes1;
-
-    NNEDI3CLData params =
+    const NNEDI3CLData params =
     {
       queue,
       kernel,
@@ -333,81 +225,7 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
     params.field = field;
     params.dh = dh;
     params.dw = dw;
-    //PVideoFrame prop1 = child->GetFrame((field > 1) ? (n >> 1) : n, env);
-    //const AVSMap* props = env->getFramePropsRO(prop1);
-
-    //if (!prop1)
-        //env->ThrowError("field = 0");
-
-    //PVideoFrame prop2 = env->NewVideoFrameP(vi, &prop1);
-
-    /*if (params.field < 0)
-    {
-        int err;
-        virtual int64_t __stdcall field_based = env->propGetInt("_FieldBased", 0, &err);
-        if (err == 0)
-        {
-            if (field_based == 1)
-                field = 0;
-            else if (field_based == 2)
-                field = 1;
-
-            if (params.field > 1 || env->propGetType(props, "_ChromaLocation") =! "i")
-            {
-                if (field_based == 0)
-                    field -= 2;
-
-                field = static_cast<int>((n & 1) ? (field == 0) : (field == 1));
-            }
-        }
-        else
-        {
-            if (field > 1)
-            {
-                field -= 2;
-                field = static_cast<int>((n & 1) ? (field == 0) : (field == 1));
-            }
-        }
-    }
-    else
-    {
-        if (field > 1)
-        {
-            field -= 2;
-            field = static_cast<int>((n & 1) ? (field == 0) : (field == 1));
-        }
-    }
-
-    try
-    {
-        this.*filter(&prop1, &prop2, field, params);
-    }
-    catch (const boost::compute::opencl_error& error)
-    {
-        params.err = "NNEDI3CL: " + error.error_string();
-        //fi->error = d->err.c_str();
-        //avs_release_video_frame(src);
-        //avs_release_video_frame(dst);
-        env->ThrowError(params.err.c_str());
-    }
-
-    props = env->getFramePropsRW(prop2) };
-
-    env->propGetInt(props, "_FieldBased", 0, 0);
-
-    if (params.field > 1 || env->propGetInt(props, "_FieldBased", 0, 0) > 1)
-    {
-        int errNum;
-        int errDen;
-        int64_t durationNum = env->propGetInt(props, "_DurationNum", 0, &errNum);
-        int64_t durationDen = env->propGetInt(props, "_DurationDen", 0, &errDen);
-        if (errNum == 0 && errDen == 0)
-        {
-            muldivRational(&durationNum, &durationDen, 1, 2);
-            env->propGetInt("_DurationNum", durationNum, 0);
-            env->propGetInt("_DurationDen", durationDen, 0);
-        }
-    }*/
+    int planecount = (planes1 == 0) ? vi.NumComponents() : planes1;
 
     try
     {
@@ -430,10 +248,10 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
         constexpr int planes_r[4] = { PLANAR_G, PLANAR_B, PLANAR_R, PLANAR_A };
        	const int* planes = (vi.IsRGB()) ? planes_r : planes_y;
 
-        for (int i = 0; i < 4; ++i)
+        for (int i{ 0 }; i < 4; ++i)
             params.process[i] = (planecount <= 0);
 
-        for (int i = 0; i < planecount; ++i)
+        for (int i{ 0 }; i < planecount; ++i)
         {
             //const int n{ avs_as_int(*(avs_as_array(avs_array_elt(args, Planes)) + i)) };
             const int n = planes[i];
@@ -948,20 +766,27 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
             params.weights1 = mem;
         }
     }
+    catch (const std::exception& e)
+    {
+        env->ThrowError(e.what());
+    }
     catch (const std::string& error)
     {
         params.err = "NNEDI3CL: " + error;
+        env->ThrowError(err.c_str());
         //v = avs_new_value_error(err.c_str());
     }
     catch (const boost::compute::no_device_found& error)
     {
         params.err = std::string{ "NNEDI3CL: " } + error.what();
         //v = avs_new_value_error(err.c_str());
+        env->ThrowError(err.c_str());
     }
     catch (const boost::compute::opencl_error& error)
     {
         params.err = "NNEDI3CL: " + error.error_string();
         //v = avs_new_value_error(err.c_str());
+        env->ThrowError(err.c_str());
     }
 
     /*if (!avs_defined(v))
@@ -991,83 +816,49 @@ Nnedi3CL::Nnedi3CL(PClip _child, int field, bool dh, bool dw, int planes1, int n
     delete init_lut;*/
 //}
 
-/*PVideoFrame Nnedi3CL::GetFrame(int n, IScriptEnvironment* env)
-{
-    PVideoFrame src = child->GetFrame(n, env);
-    PVideoFrame dst = env->NewVideoFrameP(vi, &src);
-
-    (this->*filter)(src, dst, env);
-
-    if (vi.Is420() || vi.Is422() || vi.IsYV411())
-    {
-        if (cplace == "mpeg2")
-            env->propSetInt(env->getFramePropsRW(dst), "_ChromaLocation", 0, 0);
-        else if (cplace == "mpeg1")
-            env->propSetInt(env->getFramePropsRW(dst), "_ChromaLocation", 1, 0);
-        else
-            env->propSetInt(env->getFramePropsRW(dst), "_ChromaLocation", 2, 0);
-    }
-
-    return dst;
-}
-
-static AVS_VideoFrame* AVSC_CC JincResize_GetFrame(AVS_FilterInfo* fi, int n)
-{
-    JincResize* d = reinterpret_cast<JincResize*>(fi->user_data);
-    AVS_ScriptEnvironment* env = fi->env;
-    AVS_VideoInfo* vi = &fi->vi;
-
-    AVS_VideoFrame* src = avs_get_frame(fi->child, n);
-    if (!src)
-        return nullptr;
-
-    AVS_VideoFrame* dst = avs_new_video_frame_p(env, vi, src);
-
-    (d->*d->process_frame)(src, dst, vi);
-
-    if ((avs_is_420(vi) || avs_is_422(vi) || avs_is_yv411(vi)))
-    {
-        if (d->cplace == "mpeg2")
-            avs_prop_set_int(env, avs_get_frame_props_rw(env, dst), "_ChromaLocation", 0, 0);
-        else if (d->cplace == "mpeg1")
-            avs_prop_set_int(env, avs_get_frame_props_rw(env, dst), "_ChromaLocation", 1, 0);
-        else
-            avs_prop_set_int(env, avs_get_frame_props_rw(env, dst), "_ChromaLocation", 2, 0);
-    }
-
-    avs_release_video_frame(src);
-
-    return dst;
-}*/
-
-/*PVideoFrame Nnedi3CL::GetFrame(int n, IScriptEnvironment* env)
+PVideoFrame Nnedi3CL::GetFrame(int n, IScriptEnvironment* env)
 {
     //NNEDI3CLData* d{ static_cast<NNEDI3CLData*>(fi->user_data) };
-    const NNEDI3CLData* const __restrict d;
+    const NNEDI3CLData params =
+    {
+      queue,
+      kernel,
+      src,
+      dst,
+      tmp,
+      weights0,
+      weights1Buffer,
+      weights1,
+      err,
+      field,
+      dh,
+      dw,
+      process[4],
+    };
 
     const int field_no_prop = [&]()
     {
-        if (d->field == -1)
-            return avs_get_parity(fi->child, n) ? 1 : 0;
-        else if (d->field == -2)
-            return avs_get_parity(fi->child, n >> 1) ? 3 : 2;
+        if (params.field == -1)
+            return child->GetParity(n) ? 1 : 0;
+        else if (params.field == -2)
+            return child->GetParity(n >> 1) ? 3 : 2;
         else
             return -1;
     }();
 
-    int field{ (d->field > -1) ? d->field : field_no_prop };
+    int field{ (params.field > -1) ? params.field : field_no_prop };
 
-    PVideoFrame src = child->GetFrame((field > 1) ? (n >> 1) : n, env);
+    PVideoFrame src = child->GetFrame((params.field > 1) ? (n >> 1) : n, env);
 
     if (!src)
         return nullptr;
 
     PVideoFrame dst = env->NewVideoFrameP(vi, &src);
 
-    if (d->field < 0)
+    if (params.field < 0)
     {
         int err;
-        const int64_t field_based = env->propGetInt("_FieldBased", 0, &err);
+        const int64_t field_based = env->propGetInt(env->getFramePropsRO(src), "_FieldBased", 0, &err);
         if (err == 0)
         {
             if (field_based == 1)
@@ -1075,7 +866,7 @@ static AVS_VideoFrame* AVSC_CC JincResize_GetFrame(AVS_FilterInfo* fi, int n)
             else if (field_based == 2)
                 field = 1;
 
-            if (d->field > 1 || field_no_prop > 1)
+            if (params.field > 1 || field_no_prop > 1)
             {
                 if (field_based == 0)
                     field -= 2;
@@ -1085,7 +876,7 @@ static AVS_VideoFrame* AVSC_CC JincResize_GetFrame(AVS_FilterInfo* fi, int n)
         }
         else
         {
-            if (field > 1)
+            if (params.field > 1)
             {
                 field -= 2;
                 field = static_cast<int>((n & 1) ? (field == 0) : (field == 1));
@@ -1094,7 +885,7 @@ static AVS_VideoFrame* AVSC_CC JincResize_GetFrame(AVS_FilterInfo* fi, int n)
     }
     else
     {
-        if (field > 1)
+        if (params.field > 1)
         {
             field -= 2;
             field = static_cast<int>((n & 1) ? (field == 0) : (field == 1));
@@ -1103,11 +894,16 @@ static AVS_VideoFrame* AVSC_CC JincResize_GetFrame(AVS_FilterInfo* fi, int n)
 
     try
     {
-        this->*filter(&src, &dst, field, d);
+        (this->*filter)(src, dst, field, &params);
+    }
+    catch (const std::exception& e)
+    {
+        env->ThrowError(e.what());
     }
     catch (const boost::compute::opencl_error& error)
     {
-        d->err = "NNEDI3CL: " + error.error_string();
+        err = "NNEDI3CL: " + error.error_string();
+        env->ThrowError(err.c_str());
         //fi->error = d->err.c_str();
         //avs_release_video_frame(src);
         //avs_release_video_frame(dst);
@@ -1115,11 +911,11 @@ static AVS_VideoFrame* AVSC_CC JincResize_GetFrame(AVS_FilterInfo* fi, int n)
         return nullptr;
     }
 
-    AVS_Map* props{ env->getFramePropsRW(dst) };
+    AVSMap* props{ env->getFramePropsRW(dst) };
 
     env->propGetInt(props, "_FieldBased", 0, 0);
 
-    if (d->field > 1 || field_no_prop > 1)
+    if (params.field > 1 || field_no_prop > 1)
     {
         int errNum;
         int errDen;
@@ -1128,15 +924,15 @@ static AVS_VideoFrame* AVSC_CC JincResize_GetFrame(AVS_FilterInfo* fi, int n)
         if (errNum == 0 && errDen == 0)
         {
             muldivRational(&durationNum, &durationDen, 1, 2);
-            env->propGetInt("_DurationNum", durationNum, 0);
-            env->propGetInt("_DurationDen", durationDen, 0);
+            env->propGetInt(props, "_DurationNum", durationNum, 0);
+            env->propGetInt(props, "_DurationDen", durationDen, 0);
         }
     }
 
     //avs_release_video_frame(src);
 
     return dst;
-}*/
+}
 
 AVSValue __cdecl Create_NNEDI3CL(AVSValue args, void* user_data, IScriptEnvironment* env)
 {
